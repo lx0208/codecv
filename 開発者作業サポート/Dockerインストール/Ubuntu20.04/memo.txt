@@ -1,0 +1,17 @@
+20.04 download url : https://download.docker.com/linux/ubuntu/dists/focal/pool/stable/amd64/
+
+- containerd.io_<version>_<arch>.deb
+- docker-ce_<version>_<arch>.deb
+- docker-ce-cli_<version>_<arch>.deb
+- docker-buildx-plugin_<version>_<arch>.deb
+- docker-compose-plugin_<version>_<arch>.deb
+
+
+install command
+```
+sudo dpkg -i ./containerd.io_1.7.27-1_amd64.deb \
+./docker-ce_28.1.1-1~ubuntu.20.04~focal_amd64.deb \
+./docker-ce-cli_28.1.1-1~ubuntu.20.04~focal_amd64.deb \
+./docker-buildx-plugin_0.23.0-1~ubuntu.20.04~focal_amd64.deb \
+./docker-compose-plugin_2.35.1-1~ubuntu.20.04~focal_amd64.deb
+```
