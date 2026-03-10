@@ -1,0 +1,23 @@
+services:
+  vllm-cpu:
+    image: vllm-cpu-avx2:latest
+    container_name: vllm-cpu
+    restart: unless-stopped
+    ports:
+      - "8008:8000"
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+    volumes:
+      # - /mnt/d/workspace/ai_models/meta-llama/Llama-3.2-1B:/data/models/meta-llama/Llama-3.2-1B
+      - /mnt/d/workspace/ai_models/google/gemma-3-1b-it:/data/models/google/gemma-3-1b-it
+    command:
+      - --model
+      # - /data/models/meta-llama/Llama-3.2-1B
+      - /data/models/google/gemma-3-1b-it
+      - --served-model-name
+      - google/gemma-3-1b-it
+      - --max-model-len
+      - "8192"
+      # - --chat-template
+      # - llama3
+
