@@ -1,0 +1,128 @@
+name: dgx-vllm-api
+
+services:
+  vllm-api:
+    image: ${VLLM_IMAGE:-nvcr.io/nvidia/vllm:26.02-py3}
+    container_name: vllm-api-dgx1
+    restart: unless-stopped
+
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+
+    privileged: true
+    cap_add:
+      - IPC_LOCK
+      - SYS_ADMIN
+
+    gpus: all
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+
+    volumes:
+      - /workspace/aimodels:/workspace/aimodels:ro
+      - ${HF_HOME_HOST:-/workspace/.cache/huggingface}:/root/.cache/huggingface
+      - /tmp/ray-vllm-api:/tmp/ray
+
+    environment:
+      MODEL_PATH: "/workspace/aimodels/gemma-4-26b-a4b-it"
+
+      # Ray head 控制面地址
+      RAY_HEAD_ADDR: "192.168.20.10:6379"
+      RAY_ADDRESS: "192.168.20.10:6379"
+
+      # dgx1 自己的高速网 IP，用于 vLLM/Ray worker 和 NCCL 通信
+      VLLM_HOST_IP: "10.0.0.1"
+      MASTER_ADDR: "10.0.0.1"
+
+      # 每台 DGX Spark 默认按 1 个 GPU 处理
+      RAY_NUM_GPUS: "${RAY_NUM_GPUS:-1}"
+
+      # 2 台机器，每台 1 GPU：推荐 TP=1, PP=2
+      TENSOR_PARALLEL_SIZE: "${TENSOR_PARALLEL_SIZE:-1}"
+      PIPELINE_PARALLEL_SIZE: "${PIPELINE_PARALLEL_SIZE:-2}"
+
+      # OpenAI API
+      VLLM_HOST: "0.0.0.0"
+      VLLM_PORT: "${VLLM_PORT:-8000}"
+
+      MN_IF_NAME: "enP2p1s0f1np1"
+      NCCL_SOCKET_IFNAME: "enP2p1s0f1np1"
+      UCX_NET_DEVICES: "enP2p1s0f1np1"
+      GLOO_SOCKET_IFNAME: "enP2p1s0f1np1"
+      TP_SOCKET_IFNAME: "enP2p1s0f1np1"
+      OMPI_MCA_btl_tcp_if_include: "enP2p1s0f1np1"
+
+      RAY_memory_monitor_refresh_ms: "0"
+      RAY_DEDUP_LOGS: "0"
+
+      # 排障阶段建议 INFO；稳定后可改 WARN
+      NCCL_DEBUG: "INFO"
+
+      # 避免 fork 后 tokenizer 噪音
+      TOKENIZERS_PARALLELISM: "false"
+
+    entrypoint: ["/bin/bash", "-lc"]
+    command: >
+      '
+      set -euo pipefail;
+
+      echo "[vllm-api] checking model path: ${MODEL_PATH}";
+      test -f "${MODEL_PATH}/config.json" || {
+        echo "[vllm-api] ERROR: ${MODEL_PATH}/config.json not found";
+        exit 1;
+      };
+
+      echo "[vllm-api] waiting for Ray head ${RAY_HEAD_ADDR}";
+      until ray status --address="${RAY_HEAD_ADDR}" >/dev/null 2>&1; do
+        echo "[vllm-api] Ray head not ready yet...";
+        sleep 3;
+      done;
+
+      echo "[vllm-api] joining Ray cluster as GPU worker on ${VLLM_HOST_IP}";
+      ray stop --force || true;
+
+      ray start
+      --address="${RAY_HEAD_ADDR}"
+      --node-ip-address="${VLLM_HOST_IP}"
+      --object-manager-port=8078
+      --node-manager-port=8079
+      --min-worker-port=20101
+      --max-worker-port=20200
+      --num-gpus="${RAY_NUM_GPUS}";
+
+      echo "[vllm-api] waiting for 3 Ray nodes: head + dgx1 api-worker + dgx2 worker";
+      python3 - <<PY
+      import ray, time, sys
+      ray.init(address="${RAY_HEAD_ADDR}")
+      deadline = time.time() + 300
+      while time.time() < deadline:
+          nodes = ray.nodes()
+          alive = [n for n in nodes if n.get("Alive")]
+          print("alive nodes:", len(alive), [n.get("NodeManagerAddress") for n in alive], flush=True)
+          if len(alive) >= 3:
+              sys.exit(0)
+          time.sleep(5)
+      raise SystemExit("Timed out waiting for 3 Ray nodes")
+      PY
+
+      echo "[vllm-api] Ray cluster is ready";
+      ray status --address="${RAY_HEAD_ADDR}";
+
+      echo "[vllm-api] starting vLLM OpenAI API on ${VLLM_HOST}:${VLLM_PORT}";
+      exec vllm serve "${MODEL_PATH}"
+      --host "${VLLM_HOST}"
+      --port "${VLLM_PORT}"
+      --distributed-executor-backend ray
+      --tensor-parallel-size "${TENSOR_PARALLEL_SIZE}"
+      --pipeline-parallel-size "${PIPELINE_PARALLEL_SIZE}"
+      --trust-remote-code
+      --gpu-memory-utilization 0.90
+      --max-model-len 32768
+      '

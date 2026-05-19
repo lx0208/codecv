@@ -1,0 +1,79 @@
+name: dgx-ray-worker
+
+services:
+  ray-worker:
+    image: ${VLLM_IMAGE:-nvcr.io/nvidia/vllm:26.02-py3}
+    container_name: ray-worker-dgx2
+    restart: unless-stopped
+
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+
+    privileged: true
+    cap_add:
+      - IPC_LOCK
+      - SYS_ADMIN
+
+    gpus: all
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+
+    volumes:
+      - /workspace/aimodels:/workspace/aimodels:ro
+      - ${HF_HOME_HOST:-/workspace/.cache/huggingface}:/root/.cache/huggingface
+      - /tmp/ray:/tmp/ray
+
+    environment:
+      # Ray head 控制面地址
+      RAY_HEAD_ADDR: "192.168.20.10:6379"
+
+      # dgx2 自己的高速网 IP
+      VLLM_HOST_IP: "10.0.0.2"
+      MASTER_ADDR: "10.0.0.1"
+
+      # 如果每台 DGX Spark 只有 1 个可见 GPU，保持 1
+      # 如果 nvidia-smi -L 看到更多 GPU，可以改成对应数量
+      RAY_NUM_GPUS: "${RAY_NUM_GPUS:-1}"
+
+      MN_IF_NAME: "enP2p1s0f1np1"
+      NCCL_SOCKET_IFNAME: "enP2p1s0f1np1"
+      UCX_NET_DEVICES: "enP2p1s0f1np1"
+      GLOO_SOCKET_IFNAME: "enP2p1s0f1np1"
+      TP_SOCKET_IFNAME: "enP2p1s0f1np1"
+      OMPI_MCA_btl_tcp_if_include: "enP2p1s0f1np1"
+
+      RAY_memory_monitor_refresh_ms: "0"
+      RAY_DEDUP_LOGS: "0"
+      NCCL_DEBUG: "INFO"
+
+    entrypoint: ["/bin/bash", "-lc"]
+    command: >
+      '
+      set -euo pipefail;
+
+      echo "[ray-worker-dgx2] waiting for Ray head ${RAY_HEAD_ADDR}";
+      until ray status --address="${RAY_HEAD_ADDR}" >/dev/null 2>&1; do
+        echo "[ray-worker-dgx2] Ray head not ready yet...";
+        sleep 3;
+      done;
+
+      echo "[ray-worker-dgx2] joining Ray cluster as ${VLLM_HOST_IP}";
+      ray stop --force || true;
+
+      ray start
+      --block
+      --address="${RAY_HEAD_ADDR}"
+      --node-ip-address="${VLLM_HOST_IP}"
+      --object-manager-port=8076
+      --node-manager-port=8077
+      --min-worker-port=20000
+      --max-worker-port=20100
+      --num-gpus="${RAY_NUM_GPUS}"
+      '

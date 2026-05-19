@@ -1,0 +1,74 @@
+name: dgx-ray-head
+
+services:
+  ray-head:
+    image: ${VLLM_IMAGE:-nvcr.io/nvidia/vllm:26.02-py3}
+    container_name: ray-head
+    restart: unless-stopped
+
+    network_mode: host
+    ipc: host
+    shm_size: "16gb"
+
+    privileged: true
+    cap_add:
+      - IPC_LOCK
+      - SYS_ADMIN
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+
+    volumes:
+      - /workspace/aimodels:/workspace/aimodels:ro
+      - ${HF_HOME_HOST:-/workspace/.cache/huggingface}:/root/.cache/huggingface
+      - /tmp/ray:/tmp/ray
+
+    environment:
+      # Ray head 使用管理网 IP，避免和 dgx1 上的 vllm-api Ray worker 抢同一个 node-ip
+      RAY_HEAD_IP: "192.168.20.10"
+
+      # 高速 GPU 通信用网卡
+      MN_IF_NAME: "enP2p1s0f1np1"
+      MASTER_ADDR: "10.0.0.1"
+
+      # NCCL / UCX / GLOO / TP 网络绑定
+      NCCL_SOCKET_IFNAME: "enP2p1s0f1np1"
+      UCX_NET_DEVICES: "enP2p1s0f1np1"
+      GLOO_SOCKET_IFNAME: "enP2p1s0f1np1"
+      TP_SOCKET_IFNAME: "enP2p1s0f1np1"
+      OMPI_MCA_btl_tcp_if_include: "enP2p1s0f1np1"
+
+      # Ray
+      RAY_memory_monitor_refresh_ms: "0"
+      RAY_DEDUP_LOGS: "0"
+
+      # 日志排查用；稳定后可以改 WARN
+      NCCL_DEBUG: "INFO"
+
+    entrypoint: ["/bin/bash", "-lc"]
+    command: >
+      '
+      set -euo pipefail;
+
+      echo "[ray-head] starting on ${RAY_HEAD_IP}:6379";
+      ray stop --force || true;
+
+      ray start
+      --head
+      --block
+      --node-ip-address="${RAY_HEAD_IP}"
+      --port=6379
+      --dashboard-host=0.0.0.0
+      --dashboard-port=8265
+      --ray-client-server-port=10001
+      --object-manager-port=8076
+      --node-manager-port=8077
+      --min-worker-port=20000
+      --max-worker-port=20100
+      --num-gpus=0
+      '
