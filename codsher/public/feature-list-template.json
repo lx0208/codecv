@@ -1,0 +1,102 @@
+{
+  "sidebarTitle": "機能一覧",
+  "description": "使用する機能を選択してください。",
+  "backLabel": "← 機能一覧",
+  "disabledLabel": "準備中",
+  "tools": [
+    {
+      "id": "dashboard",
+      "title": "📊ダッシュボード作成",
+      "description": "案件情報からダッシュボード作成用のプロンプトを生成します。",
+      "enabled": true,
+      "form": {
+        "title": "ダッシュボード作成",
+        "submitLabel": "プロンプト作成",
+        "promptTitle": "生成されたプロンプト",
+        "copyLabel": "コピー",
+        "copiedLabel": "コピーしました。",
+        "fields": [
+          {
+            "type": "radio-group",
+            "name": "aslead_environment",
+            "label": "aslead環境",
+            "required": true,
+            "options": [
+              { "label": "star", "value": "star" },
+              { "label": "devcp", "value": "devcp" },
+              { "label": "sd03", "value": "sd03" },
+              { "label": "sd05", "value": "sd05" },
+              { "label": "sd10", "value": "sd10" }
+            ]
+          },
+          {
+            "type": "input",
+            "name": "project_name",
+            "label": "案件名",
+            "required": true,
+            "placeholder": "案件名を入力してください"
+          },
+          {
+            "type": "input",
+            "name": "jira_project_key",
+            "label": "Jiraプロジェクトキー",
+            "required": true,
+            "placeholder": "例: ABC"
+          },
+          {
+            "type": "input",
+            "name": "jira_parent_ticket_key",
+            "label": "Jira親チケットキー",
+            "required": true,
+            "placeholder": "例: ABC-123"
+          },
+          {
+            "type": "input",
+            "name": "confluence_space",
+            "label": "Confluenceスペース",
+            "required": true,
+            "placeholder": "スペース名またはキー"
+          },
+          {
+            "type": "input",
+            "name": "parent_page_name",
+            "label": "親ページ名",
+            "required": true,
+            "placeholder": "親ページ名を入力してください"
+          }
+        ],
+        "promptTemplate": "以下の情報をもとに、ダッシュボードを作成してください。\n\n- aslead環境: {{aslead_environment}}\n- 案件名: {{project_name}}\n- Jiraプロジェクトキー: {{jira_project_key}}\n- Jira親チケットキー: {{jira_parent_ticket_key}}\n- Confluenceスペース: {{confluence_space}}\n- 親ページ名: {{parent_page_name}}"
+      }
+    },
+    {
+      "id": "feature-2",
+      "title": "📕品質評価設定",
+      "description": "JSONで名称とフォームを設定してください。",
+      "enabled": false
+    },
+    {
+      "id": "feature-3",
+      "title": "📅進捗状況設定",
+      "description": "JSONで名称とフォームを設定してください。",
+      "enabled": false
+    },
+    {
+      "id": "feature-4",
+      "title": "🔊通知設定",
+      "description": "JSONで名称とフォームを設定してください。",
+      "enabled": false
+    },
+    {
+      "id": "feature-5",
+      "title": "🧮分析設定",
+      "description": "JSONで名称とフォームを設定してください。",
+      "enabled": false
+    },
+    {
+      "id": "feature-6",
+      "title": "🎈更新設定",
+      "description": "JSONで名称とフォームを設定してください。",
+      "enabled": false
+    }
+  ]
+}
